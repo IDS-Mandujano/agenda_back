@@ -1,12 +1,15 @@
 package org.example.controller;
 
 import io.javalin.http.Context;
+import io.javalin.http.Cookie;
+import io.javalin.http.SameSite;
+import io.javalin.http.UploadedFile;
 import org.example.model.Usuario;
 import org.example.config.JwtUtil;
 import org.example.service.UsuarioService;
-import org.mindrot.jbcrypt.BCrypt;
-import io.javalin.http.UploadedFile;
 import org.example.service.FileService;
+import org.example.service.NotificationService; // <--- Import NotificationService
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -16,6 +19,9 @@ public class UsuarioController {
     private final UsuarioService service;
     private final FileService fileService = new FileService();
 
+    // 1. Instantiate NotificationService
+    private final NotificationService notificaciones = new NotificationService();
+
     public UsuarioController(UsuarioService service) {
         this.service = service;
     }
@@ -23,35 +29,55 @@ public class UsuarioController {
     public void registrar(Context ctx) {
         try {
             Usuario usuario = ctx.bodyAsClass(Usuario.class);
+
+            // 2. Capture the raw password BEFORE it gets encrypted by the service
+            String passwordOriginal = usuario.getContrasena();
+
+            // Basic validation
+            if (usuario.getCorreo() == null || usuario.getCorreo().isEmpty()) {
+                ctx.status(400).result("El correo es obligatorio para enviar las credenciales.");
+                return;
+            }
+
+            // 3. Register user (This encrypts the password and saves to DB)
             service.registrar(usuario);
-            ctx.status(201).result("Usuario registrado");
+
+            // 4. Send email with credentials in a separate thread to avoid blocking the response
+            new Thread(() -> {
+                String asunto = "Bienvenido a AFG Corporación - Tus Credenciales de Acceso";
+                String mensaje = "Hola " + usuario.getNombre() + ",\n\n" +
+                        "Tu cuenta ha sido creada exitosamente en nuestro sistema.\n\n" +
+                        "Aquí tienes tus credenciales de acceso:\n" +
+                        "--------------------------------\n" +
+                        "Correo: " + usuario.getCorreo() + "\n" +
+                        "Contraseña: " + passwordOriginal + "\n" +
+                        "--------------------------------\n\n" +
+                        "Por favor, ingresa al sistema y cambia tu contraseña lo antes posible por seguridad.\n" +
+                        "Atentamente,\nEl equipo de AFG Corporación.";
+
+                notificaciones.enviarCorreo(usuario.getCorreo(), asunto, mensaje);
+            }).start();
+
+            ctx.status(201).json(Map.of("mensaje", "Usuario registrado y credenciales enviadas por correo"));
+
         } catch (IllegalArgumentException e) {
             ctx.status(400).result(e.getMessage());
         } catch (SQLException e) {
             ctx.status(500).result("Error de base de datos: " + e.getMessage());
         } catch (Exception e) {
+            e.printStackTrace();
             ctx.status(500).result("Error interno: " + e.getMessage());
         }
     }
+
     public static class LoginRequest {
         private String correo;
         private String contrasena;
 
-        public String getCorreo() {
-            return correo;
-        }
-
-        public void setCorreo(String correo) {
-            this.correo = correo;
-        }
-
-        public String getContrasena() {
-            return contrasena;
-        }
-
-        public void setContrasena(String contrasena) {
-            this.contrasena = contrasena;
-        }
+        public String getCorreo() { return correo; }
+        public void setCorreo(String correo) { this.correo = correo; }
+        public String getContrasena() { return contrasena; }
+        public void setContrasena(String contrasena) { this.contrasena = contrasena; }
     }
 
     public void login(Context ctx) {
@@ -69,8 +95,18 @@ public class UsuarioController {
             if (usuarioOpt.isPresent()) {
                 Usuario u = usuarioOpt.get();
                 boolean valido = BCrypt.checkpw(contrasena, u.getContrasena());
+
                 if (valido) {
                     String token = JwtUtil.generarToken(u);
+
+                    // Cookie logic
+                    Cookie cookie = new Cookie("token", token);
+                    cookie.setHttpOnly(true);
+                    cookie.setPath("/");
+                    cookie.setMaxAge(86400);
+                    cookie.setSameSite(SameSite.LAX);
+                    ctx.cookie(cookie);
+
                     ctx.json(Map.of(
                             "mensaje", "Login exitoso",
                             "token", token,
@@ -89,6 +125,8 @@ public class UsuarioController {
             ctx.status(500).result("Error interno: " + e.getMessage());
         }
     }
+
+    // ... (The rest of your existing methods: encriptarPassword, listarAsesores, editarPerfil, etc. remain exactly the same) ...
 
     public void encriptarPassword(Context ctx) {
         String contrasena = ctx.formParam("contrasena");
@@ -195,18 +233,14 @@ public class UsuarioController {
                 return;
             }
 
-            // A. BUSCAR USUARIO ACTUAL PARA VER SI YA TIENE FOTO
             Optional<Usuario> usuarioOpt = service.getId(idUsuario);
             if (usuarioOpt.isPresent()) {
                 String fotoAnterior = usuarioOpt.get().getImg();
-
-                // Si tiene foto y no es una URL externa (http), la borramos del disco
                 if (fotoAnterior != null && !fotoAnterior.startsWith("http")) {
                     fileService.borrarImagenLocal(fotoAnterior);
                 }
             }
 
-            // B. GUARDAR NUEVA FOTO
             String urlRelativa = fileService.guardarImagenLocal(archivo, idUsuario);
 
             if (urlRelativa != null) {
@@ -225,20 +259,13 @@ public class UsuarioController {
     public void eliminarFotoPerfil(Context ctx) {
         try {
             int idUsuario = Integer.parseInt(ctx.pathParam("id"));
-
-            // Obtener foto actual
             Optional<Usuario> usuarioOpt = service.getId(idUsuario);
             if (usuarioOpt.isPresent()) {
                 String fotoAnterior = usuarioOpt.get().getImg();
-
-                // Borrar archivo físico
                 if (fotoAnterior != null && !fotoAnterior.startsWith("http")) {
                     fileService.borrarImagenLocal(fotoAnterior);
                 }
-
-                // Actualizar BD a NULL
                 service.actualizarFoto(idUsuario, null);
-
                 ctx.json(Map.of("mensaje", "Foto eliminada correctamente"));
             } else {
                 ctx.status(404).json(Map.of("error", "Usuario no encontrado"));
