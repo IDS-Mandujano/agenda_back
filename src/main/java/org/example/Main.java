@@ -23,25 +23,27 @@ public class Main {
         // 2. Iniciar Javalin
         Javalin app = Javalin.create(config -> {
 
-            // A. Configuración CORS
+            // A. Configuración CORS (CORREGIDO: Permitir todo para evitar errores en AWS)
             config.bundledPlugins.enableCors(cors -> {
                 cors.addRule(it -> {
-                    it.allowHost("http://127.0.0.1:5500", "http://localhost:5500",
-                            "http://127.0.0.1:5501", "http://localhost:5501");
-                    it.allowCredentials = true;
+                    it.anyHost(); // <--- ESTO ES CLAVE: Permite conexiones desde tu IP pública, localhost, etc.
                 });
             });
 
-            // B. Configuración de Archivos Estáticos (CORREGIDO)
+            // B. Configuración de Archivos Estáticos
             config.staticFiles.add(staticFiles -> {
-                staticFiles.hostedPath = "/uploads";      // Cómo se accede en la URL
-                staticFiles.directory = "uploads";        // Dónde está en tu disco
-                staticFiles.location = Location.EXTERNAL; // No está dentro del JAR
+                staticFiles.hostedPath = "/uploads";
+                staticFiles.directory = "uploads";
+                staticFiles.location = Location.EXTERNAL;
             });
 
-        }).start(7001);
+        }); // Cerramos la configuración aquí
 
-        // 3. Manejo de OPTIONS (Preflight para Cookies)
+        // 3. INICIAR EL SERVIDOR (CORREGIDO: Escuchar en 0.0.0.0)
+        // Esto permite que AWS acepte conexiones desde fuera
+        app.start("0.0.0.0", 7001);
+
+        // 4. Manejo de OPTIONS (Respaldo extra para seguridad de navegadores)
         app.options("/*", ctx -> {
             String origin = ctx.header("Origin");
             if (origin != null) {
@@ -54,7 +56,7 @@ public class Main {
             ctx.result("OK");
         });
 
-        // 4. Iniciar Dependencias y Rutas
+        // 5. Iniciar Dependencias y Rutas
         Inicio inicio = new Inicio(DBconfig.getDataSource());
 
         inicio.inicioUsuario().register(app);
@@ -64,7 +66,7 @@ public class Main {
         inicio.inicioPayPal().register(app);
         inicio.inicioServicio().register(app);
 
-        System.out.println("🚀 API iniciada en http://localhost:7001");
+        System.out.println("🚀 API iniciada en http://0.0.0.0:7001");
         System.out.println("📂 Carpeta de imágenes configurada en /uploads");
     }
 }
