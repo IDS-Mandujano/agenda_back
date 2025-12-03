@@ -30,4 +30,32 @@ public class BlogService {
             return List.of();
         }
     }
+
+    // --- NUEVOS MÉTODOS ---
+    public Blog obtenerPorId(int id) {
+        try {
+            return repository.obtenerPorId(id);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public boolean actualizarPublicacion(Blog blog) {
+        try {
+            return repository.actualizar(blog);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public boolean eliminarPublicacion(int id) {
+        try {
+            return repository.eliminar(id);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }

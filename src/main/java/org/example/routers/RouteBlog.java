@@ -1,9 +1,8 @@
 package org.example.routers;
 
 import io.javalin.Javalin;
-import static io.javalin.apibuilder.ApiBuilder.*;
-
 import org.example.controller.BlogController;
+import org.example.config.AuthMiddleware;
 
 public class RouteBlog {
 
@@ -14,10 +13,15 @@ public class RouteBlog {
     }
 
     public void register(Javalin app) {
+        // Rutas Públicas (Ver blogs)
+        app.get("/blog/listar", controller::verPublicaciones);
+        app.get("/blog/{id}", controller::verUno);
 
+        // Rutas Protegidas (Solo Admin puede crear/editar/borrar)
+        app.before("/admin/blog/*", AuthMiddleware.requireAdmin);
 
-        app.get("/blog/ver", controller.verPublicacion);
-
-        app.post("/admin/blog/crear", controller.crearPublicacion);
+        app.post("/admin/blog/crear", controller::crearPublicacion);
+        app.put("/admin/blog/editar/{id}", controller::editarPublicacion);
+        app.delete("/admin/blog/eliminar/{id}", controller::eliminarPublicacion);
     }
 }
