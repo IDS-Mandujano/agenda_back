@@ -13,14 +13,26 @@ public class UsuarioRepository {
 
     private final DataSource dataSource;
 
-    // ✔ Constructor que recibe DataSource
     public UsuarioRepository(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
+    public void actualizarFoto(int idUsuario, String urlFoto) throws SQLException {
+        String sql = "UPDATE usuario SET img = ? WHERE idUsuario = ?";
+
+        try (Connection conn = DBconfig.getDataSource().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, urlFoto);
+            stmt.setInt(2, idUsuario);
+
+            stmt.executeUpdate();
+        }
+    }
+
     public void registrarUsuario(Usuario usuario) throws SQLException {
-        String sql = "INSERT INTO usuario (idRol, nombre, apellido, segundoApellido, rfc, curp, contrasena, correo, telefono, img, imagenPublicId, estado) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo')";
+        String sql = "INSERT INTO usuario (idRol, nombre, apellido, segundoApellido, rfc, curp, contrasena, correo, telefono, img, estado) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo')";
 
         try (Connection conn = DBconfig.getDataSource().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -34,12 +46,7 @@ public class UsuarioRepository {
             stmt.setString(7, usuario.getContrasena());
             stmt.setString(8, usuario.getCorreo());
             stmt.setString(9, usuario.getTelefono());
-
-            // Asumiendo que ahora 'img' es un String (URL) en tu modelo,
-            // o si sigue siendo byte[], debes convertirlo o dejarlo null por ahora.
-            // Como la BD dice VARCHAR, enviamos String.
-            stmt.setString(10, null); // img (puedes poner usuario.getImg() si cambias el tipo)
-            stmt.setString(11, null); // imagenPublicId
+            stmt.setString(10, usuario.getImg()); // Ahora guardamos la URL si existe
 
             stmt.executeUpdate();
         }
@@ -61,9 +68,7 @@ public class UsuarioRepository {
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, correo);
             ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return Optional.of(mapearUsuario(rs));
-            }
+            if (rs.next()) return Optional.of(mapearUsuario(rs));
         }
         return Optional.empty();
     }
@@ -74,15 +79,14 @@ public class UsuarioRepository {
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, id);
             ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return Optional.of(mapearUsuario(rs));
-            }
+            if (rs.next()) return Optional.of(mapearUsuario(rs));
         }
         return Optional.empty();
     }
 
     public void updatePerfil(Usuario usuario) throws SQLException {
-        String sql = "UPDATE usuario SET nombre=?, apellido=?, segundoApellido=?, rfc=?, curp=?, telefono=?, correo=?, idRol=?, img=? WHERE idUsuario=?";
+        // No actualizamos la foto aquí, para eso está el endpoint específico
+        String sql = "UPDATE usuario SET nombre=?, apellido=?, segundoApellido=?, rfc=?, curp=?, telefono=?, correo=?, idRol=? WHERE idUsuario=?";
 
         try (Connection conn = DBconfig.getDataSource().getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -95,9 +99,7 @@ public class UsuarioRepository {
             stmt.setString(6, usuario.getTelefono());
             stmt.setString(7, usuario.getCorreo());
             stmt.setInt(8, usuario.getIdRol());
-            stmt.setString(9, null);
-
-            stmt.setInt(10, usuario.getIdUsuario());
+            stmt.setInt(9, usuario.getIdUsuario());
 
             int filas = stmt.executeUpdate();
             if (filas == 0) {
@@ -115,10 +117,14 @@ public class UsuarioRepository {
         u.setTelefono(rs.getString("telefono"));
         u.setCorreo(rs.getString("correo"));
         u.setContrasena(rs.getString("contrasena"));
-        u.setRfc(rs.getString("rfc"));   // Faltaba leer esto
+        u.setRfc(rs.getString("rfc"));
         u.setCurp(rs.getString("curp"));
         u.setIdRol(rs.getInt("idRol"));
         u.setEstado(rs.getString("estado"));
+
+        // --- CAMBIO: Leemos la URL de la imagen ---
+        u.setImg(rs.getString("img"));
+
         return u;
     }
 
@@ -133,8 +139,7 @@ public class UsuarioRepository {
     }
 
     public List<Usuario> listarAsesores() throws SQLException {
-        // Ajusta 'idRol = 2' al ID que uses para tus empleados/asesores
-        String sql = "SELECT idUsuario, idRol, nombre, apellido FROM usuario WHERE idRol = 3";
+        String sql = "SELECT idUsuario, idRol, nombre, apellido, img FROM usuario WHERE idRol = 3";
         List<Usuario> lista = new ArrayList<>();
 
         try (Connection con = DBconfig.getDataSource().getConnection();
@@ -147,6 +152,7 @@ public class UsuarioRepository {
                 u.setIdRol(rs.getInt("idRol"));
                 u.setNombre(rs.getString("nombre"));
                 u.setApellido(rs.getString("apellido"));
+                u.setImg(rs.getString("img"));
                 lista.add(u);
             }
         }
@@ -177,5 +183,4 @@ public class UsuarioRepository {
         }
         return lista;
     }
-
 }

@@ -16,8 +16,11 @@ public class UsuarioService {
         this.repository = repository;
     }
 
+    public void actualizarFoto(int idUsuario, String urlFoto) throws SQLException {
+        repository.actualizarFoto(idUsuario, urlFoto);
+    }
+
     public void registrar(Usuario usuario) throws SQLException {
-        // 1. Verificar si el correo ya existe
         if (repository.verificarCorreo(usuario.getCorreo())) {
             throw new IllegalArgumentException("El correo electrónico ya está registrado.");
         }
@@ -50,9 +53,7 @@ public class UsuarioService {
         if (!repository.verificarCorreo(correo)) {
             throw new IllegalArgumentException("El correo proporcionado no está registrado.");
         }
-
         String hash = BCrypt.hashpw(nuevaPassword, BCrypt.gensalt());
-
         repository.updatePassword(correo, hash);
     }
 

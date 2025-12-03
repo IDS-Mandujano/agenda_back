@@ -39,6 +39,8 @@ public class RoutesUsuario {
 
         app.get("/api/usuarios/asesores", controller::listarAsesores);
         app.get("/admin/usuarios", controller::listarUsuarios);
+        app.post("/usuario/{id}/foto", controller::subirFotoPerfil);
         app.put("/usuario/eliminar/{id}", controller::eliminarUsuario);
+        app.delete("/usuario/{id}/foto", controller::eliminarFotoPerfil);
     }
 }

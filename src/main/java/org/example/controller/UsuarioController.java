@@ -5,6 +5,8 @@ import org.example.model.Usuario;
 import org.example.config.JwtUtil;
 import org.example.service.UsuarioService;
 import org.mindrot.jbcrypt.BCrypt;
+import io.javalin.http.UploadedFile;
+import org.example.service.FileService;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -12,6 +14,7 @@ import java.util.Optional;
 
 public class UsuarioController {
     private final UsuarioService service;
+    private final FileService fileService = new FileService();
 
     public UsuarioController(UsuarioService service) {
         this.service = service;
@@ -179,6 +182,69 @@ public class UsuarioController {
             ctx.json(service.listarTodos());
         } catch (Exception e) {
             ctx.status(500).json(Map.of("error", "Error al listar usuarios"));
+        }
+    }
+
+    public void subirFotoPerfil(Context ctx) {
+        try {
+            int idUsuario = Integer.parseInt(ctx.pathParam("id"));
+            UploadedFile archivo = ctx.uploadedFile("imagen");
+
+            if (archivo == null) {
+                ctx.status(400).json(Map.of("error", "No se envió imagen"));
+                return;
+            }
+
+            // A. BUSCAR USUARIO ACTUAL PARA VER SI YA TIENE FOTO
+            Optional<Usuario> usuarioOpt = service.getId(idUsuario);
+            if (usuarioOpt.isPresent()) {
+                String fotoAnterior = usuarioOpt.get().getImg();
+
+                // Si tiene foto y no es una URL externa (http), la borramos del disco
+                if (fotoAnterior != null && !fotoAnterior.startsWith("http")) {
+                    fileService.borrarImagenLocal(fotoAnterior);
+                }
+            }
+
+            // B. GUARDAR NUEVA FOTO
+            String urlRelativa = fileService.guardarImagenLocal(archivo, idUsuario);
+
+            if (urlRelativa != null) {
+                service.actualizarFoto(idUsuario, urlRelativa);
+                ctx.json(Map.of("mensaje", "Foto actualizada", "url", urlRelativa));
+            } else {
+                ctx.status(500).json(Map.of("error", "Fallo al guardar en disco"));
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public void eliminarFotoPerfil(Context ctx) {
+        try {
+            int idUsuario = Integer.parseInt(ctx.pathParam("id"));
+
+            // Obtener foto actual
+            Optional<Usuario> usuarioOpt = service.getId(idUsuario);
+            if (usuarioOpt.isPresent()) {
+                String fotoAnterior = usuarioOpt.get().getImg();
+
+                // Borrar archivo físico
+                if (fotoAnterior != null && !fotoAnterior.startsWith("http")) {
+                    fileService.borrarImagenLocal(fotoAnterior);
+                }
+
+                // Actualizar BD a NULL
+                service.actualizarFoto(idUsuario, null);
+
+                ctx.json(Map.of("mensaje", "Foto eliminada correctamente"));
+            } else {
+                ctx.status(404).json(Map.of("error", "Usuario no encontrado"));
+            }
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
     }
 }
