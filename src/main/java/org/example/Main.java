@@ -68,5 +68,6 @@ public class Main {
 
         System.out.println("🚀 API iniciada en http://0.0.0.0:7001");
         System.out.println("📂 Carpeta de imágenes configurada en /uploads");
+        //comentarios
     }
 }
